@@ -2,12 +2,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class SphereDensity : DensityGenerator {
-
+[CreateAssetMenu(fileName = "SphereDensity", menuName = "Density Generator/Sphere")]
+public class SphereDensity : DensityGenerator
+{
+    [Range(0.0001f,1f)]
     public float radius = 1;
 
-    public override ComputeBuffer Generate (ComputeBuffer pointsBuffer, int numPointsPerAxis, float boundsSize, Vector3 worldBounds, Vector3 centre, Vector3 offset, float spacing) {
+    public override float[] Generate () {
         densityShader.SetFloat ("radius", radius);
-        return base.Generate (pointsBuffer, numPointsPerAxis, boundsSize, worldBounds, centre, offset, spacing);
+        return base.Generate ();
     }
 }

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 39819c572c3204902847662df1fa9c6e, type: 3}
+  m_Name: NoiseDensity
+  m_EditorClassIdentifier: 
+  dimensions: {x: 8, y: 8, z: 8}
+  boundsSize: 16
+  offset: {x: 0, y: 0, z: 0}
+  densityShader: {fileID: 7200000, guid: 6f17253ba515b49de95452c1dcbdc45c, type: 3}
+  seed: 6
+  numOctaves: 6
+  lacunarity: 2
+  persistence: 0.52
+  noiseScale: 2.99
+  noiseWeight: 6.09
+  closeEdges: 0
+  floorOffset: 5.19
+  weightMultiplier: 3.61
+  hardFloorHeight: -2.84
+  hardFloorWeight: 3.05
+  shaderParams: {x: 1, y: 0, z: 0, w: 0}

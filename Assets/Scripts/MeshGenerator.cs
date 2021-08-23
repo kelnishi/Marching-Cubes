@@ -30,7 +30,6 @@ public class MeshGenerator : MonoBehaviour {
     public bool autoUpdateInEditor = true;
     public bool autoUpdateInGame = true;
 
-    public ComputeShader precompute;
     public ComputeShader shader;
     public Material mat;
     public bool generateColliders;
@@ -278,12 +277,13 @@ public class MeshGenerator : MonoBehaviour {
 
         Vector3 worldBounds = new Vector3 (numChunks.x, numChunks.y, numChunks.z) * boundsSize;
 
-        densityGenerator.Generate (pointsBuffer, numPointsPerAxis, boundsSize, worldBounds, centre, offset, pointSpacing);
+        // float[] points = densityGenerator.Generate ();
 
         
         edgeBuffer.SetCounterValue(0);
         shader.SetBuffer(0, "edges", edgeBuffer);
         
+        shader.SetTexture();
         shader.SetBuffer (0, "points", pointsBuffer);
             
         triangleBuffer.SetCounterValue (0);
@@ -483,8 +483,6 @@ public class MeshGenerator : MonoBehaviour {
         public int id;
         //The interpolated point
         public Vector3 p;
-        //The normal sum/count
-        // public Vector4 pn;
     }
 
     struct KeyValue

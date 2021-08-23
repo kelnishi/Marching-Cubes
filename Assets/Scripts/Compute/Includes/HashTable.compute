@@ -1,0 +1,69 @@
+﻿//
+// const uint kEmpty = 0xffffffff;
+//
+// struct KeyValue
+// {
+//     int key;
+//     int value;
+// };
+//
+// uint pcg_hash(uint input)
+// {
+//     uint state = input * 747796405u + 2891336453u;
+//     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+//     return (word >> 22u) ^ word;
+// }
+//
+// void gpu_hashtable_insert(KeyValue hashtable[], int capacity, uint key, uint value)
+// {
+//     uint slot = pcg_hash(key);
+//
+//     while (true)
+//     {
+//         uint prev = kEmpty;
+//         InterlockedCompareExchange(hashtable[slot].key, kEmpty, key, prev);
+//         if (prev == kEmpty || prev == key)
+//         {
+//             hashtable[slot].value = value;
+//             break;
+//         }
+//         slot = (slot + 1) & (capacity - 1);
+//     }
+// }
+//
+// uint gpu_hashtable_lookup(KeyValue hashtable[], int capacity, uint key)
+// {
+//     uint slot = pcg_hash(key);
+//
+//     while (true)
+//     {
+//         if (hashtable[slot].key == key)
+//         {
+//             return hashtable[slot].value;
+//         }
+//         if (hashtable[slot].key == kEmpty)
+//         {
+//             return kEmpty;
+//         }
+//         slot = (slot + 1) & (capacity - 1);
+//     }
+// }
+// //
+// // void gpu_hashtable_delete(KeyValue* hashtable, uint key, uint value)
+// // {
+// //     uint slot = hash(key);
+// //
+// //     while (true)
+// //     {
+// //         if (hashtable[slot].key == key)
+// //         {
+// //             hashtable[slot].value = kEmpty;
+// //             return;
+// //         }
+// //         if (hashtable[slot].key == kEmpty)
+// //         {
+// //             return;
+// //         }
+// //         slot = (slot + 1) & (kHashTableCapacity - 1);
+// //     }
+// // }

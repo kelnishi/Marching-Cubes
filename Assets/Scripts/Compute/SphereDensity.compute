@@ -1,18 +1,17 @@
 ﻿#pragma kernel Density
-#include "/Includes/Density.compute"
+#include "./Includes/Density.compute"
 
 float radius;
 
 [numthreads(numThreads,numThreads,numThreads)]
-void Density (uint3 id : SV_DispatchThreadID)
+void Density (int3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numPointsPerAxis || id.y >= numPointsPerAxis || id.z >= numPointsPerAxis) {
+    if (any(id >= dimensions))
         return;
-    }
+    
+    float3 pos = positionOfCoord(id);
+    float density = clamp((1-length(pos - center)*2/boundsSize)*radius, 0.0, 1.0);
 
-    float3 pos = centre + id * spacing - boundsSize/2;
-    float density = radius - length(pos + offset);
-
-    int index = indexFromCoord(id.x,id.y,id.z);
-    points[index] = float4(pos, density);
+    int index = indexFromCoord(id);
+    points[index] = lerp(densityRange.x, densityRange.y, density);
 }

@@ -1,6 +1,6 @@
 ﻿#pragma kernel Density
-#include "/Includes/Density.compute"
-#include "/Includes/Noise.compute"
+#include "./Includes/Density.compute"
+#include "./Includes/Noise.compute"
 
 // Noise settings
 StructuredBuffer<float3> offsets;
@@ -20,11 +20,10 @@ float4 params;
 [numthreads(numThreads,numThreads,numThreads)]
 void Density (int3 id : SV_DispatchThreadID)
 {
-    if (id.x >= numPointsPerAxis || id.y >= numPointsPerAxis || id.z >= numPointsPerAxis) {
+    if (any(id >= dimensions))
         return;
-    }
-
-    float3 pos = centre + id * spacing - boundsSize/2;
+    
+    float3 pos = positionOfCoord(id);
     float offsetNoise = 0;
 
     float noise = 0;
@@ -56,7 +55,7 @@ void Density (int3 id : SV_DispatchThreadID)
         
     }
 
-    int index = indexFromCoord(id.x,id.y,id.z);
-    points[index] = float4(pos, finalVal);
+    int index = indexFromCoord(id);
+    points[index] = lerp(densityRange.x, densityRange.y, finalVal);
     
 }

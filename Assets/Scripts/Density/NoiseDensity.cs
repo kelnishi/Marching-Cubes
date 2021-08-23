@@ -1,8 +1,11 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 
-public class NoiseDensity : DensityGenerator {
+[CreateAssetMenu(fileName = "NoiseDensity", menuName = "Density Generator/Noise")]
+public class NoiseDensity : DensityGenerator 
+{
 
     [Header ("Noise")]
     public int seed;
@@ -20,9 +23,7 @@ public class NoiseDensity : DensityGenerator {
 
     public Vector4 shaderParams;
 
-    public override ComputeBuffer Generate (ComputeBuffer pointsBuffer, int numPointsPerAxis, float boundsSize, Vector3 worldBounds, Vector3 centre, Vector3 offset, float spacing) {
-        buffersToRelease = new List<ComputeBuffer> ();
-
+    public override float[] Generate () {
         // Noise parameters
         var prng = new System.Random (seed);
         var offsets = new Vector3[numOctaves];
@@ -35,7 +36,6 @@ public class NoiseDensity : DensityGenerator {
         offsetsBuffer.SetData (offsets);
         buffersToRelease.Add (offsetsBuffer);
 
-        densityShader.SetVector ("centre", new Vector4 (centre.x, centre.y, centre.z));
         densityShader.SetInt ("octaves", Mathf.Max (1, numOctaves));
         densityShader.SetFloat ("lacunarity", lacunarity);
         densityShader.SetFloat ("persistence", persistence);
@@ -50,6 +50,6 @@ public class NoiseDensity : DensityGenerator {
 
         densityShader.SetVector ("params", shaderParams);
 
-        return base.Generate (pointsBuffer, numPointsPerAxis, boundsSize, worldBounds, centre, offset, spacing);
+        return base.Generate ();
     }
 }

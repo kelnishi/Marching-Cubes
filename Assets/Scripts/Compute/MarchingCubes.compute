@@ -1,5 +1,4 @@
 ﻿#pragma kernel March
-// #include "./Includes/HashTable.compute"
 #include "./Includes/MarchTables.compute"
 
 static const int numThreads = 8;
@@ -16,9 +15,6 @@ struct Edge
     //The interpolated point
     float3 p;
 };
-
-// int hashCapacity;
-// RWStructuredBuffer<KeyValue> hashTable;
 
 AppendStructuredBuffer<Edge> edges;
 AppendStructuredBuffer<Triangle> triangles;
@@ -39,24 +35,6 @@ int indexFromId(int3 id)
 
 int indexFromCoord(int x, int y, int z) {
     return z * numPointsPerAxis * numPointsPerAxis + y * numPointsPerAxis + x;
-}
-
-float3 calculateNormal(Triangle tri) {
-    //Set Vector U to (Triangle.p2 minus Triangle.p1)
-    float3 u = tri.vertexB - tri.vertexA;
-    //Set Vector V to (Triangle.p3 minus Triangle.p1)
-    float3 v = tri.vertexC - tri.vertexA;
-    
-    //Set Normal.x to (multiply U.y by V.z) minus (multiply U.z by V.y)
-    //Set Normal.y to (multiply U.z by V.x) minus (multiply U.x by V.z)
-    //Set Normal.z to (multiply U.x by V.y) minus (multiply U.y by V.x)
-    float3 normal = {
-        (u.y * v.z) - (u.z * v.y),
-        (u.z * v.x) - (u.x * v.z),
-        (u.x * v.y) - (u.y * v.x)
-    };
-    //Returning Normal
-    return normal;
 }
 
 int calculateEdgeIndex(int3 id, int edge)
@@ -96,7 +74,12 @@ Edge createEdge(float4 cubeCorners[8], int3 id, int index)
 void generateEdge(float4 cubeCorners[8], int3 id, int edgeRef, int index)
 {
     if ((edgeRef & edgeFlags[index]) != 0)
-        edges.Append(createEdge(cubeCorners, id, index));
+    {
+        Edge edge = createEdge(cubeCorners, id, index);
+        uint count, stride;
+        edges.GetDimensions(count, stride);
+        edges.Append(edge);
+    }
 }
 
 [numthreads(numThreads,numThreads,numThreads)]
@@ -178,12 +161,3 @@ void March (int3 id : SV_DispatchThreadID)
     }
 
 }
-
-
-//
-// #pragma kernel Map
-// [numthreads(numThreads,numThreads,numThreads)]
-// void Map (int3 id : SV_DispatchThreadID)
-// {
-//     
-// }

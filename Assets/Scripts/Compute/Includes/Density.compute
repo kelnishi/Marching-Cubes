@@ -1,13 +1,21 @@
 ﻿static const int numThreads = 8;
 
-RWStructuredBuffer<float4> points;
-int numPointsPerAxis;
-float boundsSize;
-float3 centre;
-float3 offset;
-float spacing;
+RWStructuredBuffer<float> points;
+int3 dimensions;
 float3 worldSize;
+float2 densityRange;
 
-int indexFromCoord(uint x, uint y, uint z) {
-    return z * numPointsPerAxis * numPointsPerAxis + y * numPointsPerAxis + x;
+float boundsSize;
+float3 center;
+float3 offset;
+float3 spacing;
+
+int indexFromCoord(int3 coord)
+{
+    return ((coord.z * dimensions.z) + coord.y) * dimensions.y + coord.x;
+}
+
+float3 positionOfCoord(int3 coord)
+{
+    return ((float3)coord/dimensions + offset) * boundsSize;
 }
