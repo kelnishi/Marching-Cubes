@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
-using DefaultNamespace;
+using System.Runtime.InteropServices;
 using UnityEditor.UIElements;
 using UnityEngine;
 using Plane = UnityEngine.Plane;
@@ -30,7 +30,6 @@ public class MeshGenerator : MonoBehaviour {
     public bool autoUpdateInEditor = true;
     public bool autoUpdateInGame = true;
 
-    public ComputeShader precompute;
     public ComputeShader shader;
     public Material mat;
     public bool generateColliders;
@@ -55,7 +54,8 @@ public class MeshGenerator : MonoBehaviour {
 
     // Buffers
     // ComputeBuffer hashTable;
-    ComputeBuffer edgeBuffer;
+    // ComputeBuffer edgeBuffer;
+    ComputeBuffer vertexBuffer;
     ComputeBuffer triangleBuffer;
     ComputeBuffer pointsBuffer;
     ComputeBuffer countBuffer;
@@ -204,8 +204,8 @@ public class MeshGenerator : MonoBehaviour {
     public void edgeIdToCoords(int id, out Vector3Int coord, out Vector3Int dir)
     {
         coord = new Vector3Int();
-        int xyz = id % 4;
-        id = id >> 2;
+        int xyz = id % 3;
+        id = id / 3;
         coord.x = id % numPointsPerAxis;
         id = id / numPointsPerAxis;
         coord.y = id % numPointsPerAxis;
@@ -214,8 +214,8 @@ public class MeshGenerator : MonoBehaviour {
         switch (xyz)
         {
             case 0: dir = Vector3Int.right; break;
-            case 1: dir = Vector3Int.forward; break;
-            case 2: dir = Vector3Int.up; break;
+            case 1: dir = Vector3Int.up; break;
+            case 2: dir = Vector3Int.forward; break;
             default: dir = Vector3Int.zero; break;
         }
     }
@@ -237,35 +237,6 @@ public class MeshGenerator : MonoBehaviour {
     int indexFromCoord(Vector3Int c) {
         return c.z * numPointsPerAxis * numPointsPerAxis + c.y * numPointsPerAxis + c.x;
     }
-    void printEdge(int id, Vector4[] points, int edgeRef)
-    {
-        Vector3Int c;
-        Vector3Int dir;
-        edgeIdToCoords(id, out c,out dir);
-
-        int startindex = indexFromCoord(c);
-        int endindex = indexFromCoord(c + dir);
-        float startdensity = points[startindex].w;
-        float enddensity = points[endindex].w;
-        (var cube, var edge, var poly) = OfflineMarch.LookupConfig(c, numPointsPerAxis, points, isoLevel);
-
-        string p = "[";
-        for (int i = 0; poly[i] != -1; ++i)
-        {
-            if (i > 0)
-                p += ",";
-            p += poly[i].ToString();
-        }
-        p += "]";
-
-        Debug.Log($"{c}({startdensity}|{cube}|{Convert.ToString(edge, 16)}/{Convert.ToString(edgeRef, 16)}|{p}) -> {c+dir}({enddensity})");
-        
-    }
-
-    void printBox(Vector3Int c, Vector4[] points)
-    {
-        OfflineMarch.PrintBox(c, numPointsPerAxis, points, isoLevel);
-    }
 
     public void UpdateChunkMesh (Chunk chunk) {
         int numPoints = numPointsPerAxis * numPointsPerAxis * numPointsPerAxis;
@@ -275,17 +246,16 @@ public class MeshGenerator : MonoBehaviour {
 
         Vector3Int coord = chunk.coord;
         Vector3 centre = CentreFromCoord (coord);
-
         Vector3 worldBounds = new Vector3 (numChunks.x, numChunks.y, numChunks.z) * boundsSize;
 
         densityGenerator.Generate (pointsBuffer, numPointsPerAxis, boundsSize, worldBounds, centre, offset, pointSpacing);
-
         
-        edgeBuffer.SetCounterValue(0);
-        shader.SetBuffer(0, "edges", edgeBuffer);
-        
+        shader.SetBuffer(0, "verts", vertexBuffer);
         shader.SetBuffer (0, "points", pointsBuffer);
-            
+        shader.SetVector ("centre", new Vector4 (centre.x, centre.y, centre.z));
+        shader.SetFloat ("spacing", pointSpacing);
+        shader.SetFloat ("boundsSize", boundsSize);
+        
         triangleBuffer.SetCounterValue (0);
         shader.SetBuffer (0, "triangles", triangleBuffer);
         shader.SetInt ("numPointsPerAxis", numPointsPerAxis);
@@ -295,29 +265,14 @@ public class MeshGenerator : MonoBehaviour {
         
         int[] countArray = { 0 };
         
-        //Get Edges
-        ComputeBuffer.CopyCount(edgeBuffer, countBuffer, 0);
-        countBuffer.GetData(countArray);
-        int numEdges = countArray[0];
-        
-        Edge[] edges = new Edge[numEdges];
-        edgeBuffer.GetData(edges, 0, 0, numEdges);
-        
         Mesh mesh = chunk.mesh;
         mesh.Clear ();
-
-        var vertices = new Vector3[numEdges];
-
-        Dictionary<int, int> idMap = new Dictionary<int, int>();
-        for (int i = 0; i < numEdges; i++)
-        {
-            vertices[i] = edges[i].p;
-
-            if (idMap.ContainsKey(edges[i].id))
-                Debug.LogWarning($"Duplicate Edge:{edgeFromId((int)edges[i].id)}");
-            else
-                idMap[edges[i].id] = i;
-        }
+        
+        //Sparse matrix of edge verts
+        //Ideally we could reuse this buffer raw without copying it back from the GPU.
+        Vector3[] verts = new Vector3[numPoints*3];
+        vertexBuffer.GetData(verts, 0, 0, numPoints*3);
+        mesh.vertices = verts;
         
         // Get number of triangles in the triangle buffer
         ComputeBuffer.CopyCount (triangleBuffer, countBuffer, 0);
@@ -325,20 +280,26 @@ public class MeshGenerator : MonoBehaviour {
         int numTris = countArray[0];
         
         // Get triangle data from shader
+        //Also would be nice if we could use this raw on the GPU without copying it back.
         Triangle[] tris = new Triangle[numTris];
         triangleBuffer.GetData (tris, 0, 0, numTris);
         
-        var meshTriangles = new int[numTris * 3];
-        for (int i = 0; i < numTris; i++)
+        //Do a fast memory unpack
+        GCHandle handle = GCHandle.Alloc(tris, GCHandleType.Pinned);
+        try
         {
-            meshTriangles[i * 3] = idMap[tris[i].a];
-            meshTriangles[i * 3 + 1] = idMap[tris[i].b];
-            meshTriangles[i * 3 + 2] = idMap[tris[i].c];
+            IntPtr pointer = handle.AddrOfPinnedObject();
+            int[] indices = new int[numTris * 3];
+            Marshal.Copy(pointer, indices, 0, indices.Length);
+            
+            mesh.triangles = indices;
         }
-
-        mesh.vertices = vertices;
-        mesh.triangles = meshTriangles;
-
+        finally
+        {
+            if (handle.IsAllocated)
+                handle.Free();
+        }
+        
         mesh.RecalculateNormals ();
     }
 
@@ -357,6 +318,15 @@ public class MeshGenerator : MonoBehaviour {
         }
     }
 
+    
+    struct Triangle 
+    {
+        //Vertex indices = Cube.index + x/y/z
+        public int a;
+        public int b;
+        public int c;
+    }
+    
     void CreateBuffers () {
         int numPoints = numPointsPerAxis * numPointsPerAxis * numPointsPerAxis;
         int numVoxelsPerAxis = numPointsPerAxis - 1;
@@ -372,9 +342,10 @@ public class MeshGenerator : MonoBehaviour {
                 ReleaseBuffers ();
             }
             
-            edgeBuffer = new ComputeBuffer(maxEdgeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Edge)), ComputeBufferType.Append);
+            
+            vertexBuffer = new ComputeBuffer(maxEdgeCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3)));
             triangleBuffer = new ComputeBuffer (maxTriangleCount, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Triangle)), ComputeBufferType.Append);
-            pointsBuffer = new ComputeBuffer (numPoints, System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector4)));
+            pointsBuffer = new ComputeBuffer (numPoints, System.Runtime.InteropServices.Marshal.SizeOf(typeof(float)));
             countBuffer = new ComputeBuffer (1, sizeof (int), ComputeBufferType.Raw);
 
         }
@@ -382,8 +353,7 @@ public class MeshGenerator : MonoBehaviour {
 
     void ReleaseBuffers () {
         if (triangleBuffer != null) {
-            //hashTable.Release();
-            edgeBuffer.Release();
+            vertexBuffer.Release();
             triangleBuffer.Release ();
             pointsBuffer.Release ();
             countBuffer.Release ();
@@ -469,36 +439,7 @@ public class MeshGenerator : MonoBehaviour {
     void OnValidate() {
         settingsUpdated = true;
     }
-
-    struct Triangle 
-    {
-        //Vertex indices = Cube.index + x/y/z
-        public int a;
-        public int b;
-        public int c;
-    }
-
-    struct Edge
-    {
-        public int id;
-        //The interpolated point
-        public Vector3 p;
-        //The normal sum/count
-        // public Vector4 pn;
-    }
-
-    struct KeyValue
-    {
-        public uint key;
-        public uint value;
-    }
-    
-    struct Cube
-    {
-        public Edge x;
-        public Edge y;
-        public Edge z;
-    }
+  
 
     void OnDrawGizmos () {
         if (showBoundsGizmo) {

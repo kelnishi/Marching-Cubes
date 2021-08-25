@@ -17,15 +17,15 @@ struct Edge
     float3 p;
 };
 
-// int hashCapacity;
-// RWStructuredBuffer<KeyValue> hashTable;
-
-AppendStructuredBuffer<Edge> edges;
+RWStructuredBuffer<float3> verts;
 AppendStructuredBuffer<Triangle> triangles;
-RWStructuredBuffer<float4> points;
+RWStructuredBuffer<float> points;
 
 int numPointsPerAxis;
 float isoLevel;
+float3 centre;
+float boundsSize;
+float spacing;
 
 float3 interpolateVerts(float4 v1, float4 v2) {
     float t = (isoLevel - v1.w) / (v2.w - v1.w);
@@ -37,8 +37,13 @@ int indexFromId(int3 id)
     return id.z * numPointsPerAxis * numPointsPerAxis + id.y * numPointsPerAxis + id.x;
 }
 
-int indexFromCoord(int x, int y, int z) {
-    return z * numPointsPerAxis * numPointsPerAxis + y * numPointsPerAxis + x;
+// int indexFromCoord(int x, int y, int z) {
+//     return z * numPointsPerAxis * numPointsPerAxis + y * numPointsPerAxis + x;
+// }
+
+int indexFromCoord(int3 id)
+{
+    return id.z * numPointsPerAxis * numPointsPerAxis + id.y * numPointsPerAxis + id.x;
 }
 
 float3 calculateNormal(Triangle tri) {
@@ -62,41 +67,38 @@ float3 calculateNormal(Triangle tri) {
 int calculateEdgeIndex(int3 id, int edge)
 {
     const int X = 0;
-    const int Y = 2;
-    const int Z = 1;
+    const int Y = 1;
+    const int Z = 2;
     switch (edge)
     {
-        case 0: return 4*indexFromCoord(id.x  , id.y  , id.z  ) +X;     //X
-        case 1: return 4*indexFromCoord(id.x+1, id.y  , id.z  ) +Z;     //+X Z
-        case 2: return 4*indexFromCoord(id.x  , id.y  , id.z+1) +X; //+Z X
-        case 3: return 4*indexFromCoord(id.x  , id.y  , id.z  ) +Z;       //Z
-        case 4: return 4*indexFromCoord(id.x  , id.y+1, id.z  ) +X;     //+Y X
-        case 5: return 4*indexFromCoord(id.x+1, id.y+1, id.z  ) +Z;   //+X+Y Z
-        case 6: return 4*indexFromCoord(id.x  , id.y+1, id.z+1) +X; //+Z+Y X
-        case 7: return 4*indexFromCoord(id.x  , id.y+1, id.z  ) +Z;     //+Y Z
-        case 8: return 4*indexFromCoord(id.x  , id.y  , id.z  ) +Y;       //Y
-        case 9: return 4*indexFromCoord(id.x+1, id.y  , id.z  ) +Y;     //+X Y
-        case 10: return 4*indexFromCoord(id.x+1, id.y  , id.z+1) +Y;//+X+Z Y
-        case 11: return 4*indexFromCoord(id.x  , id.y  , id.z+1) +Y;  //+Z Y
+        case 0 : return 3*indexFromCoord(id+int3(0,0,0)) +X; //     X
+        case 1 : return 3*indexFromCoord(id+int3(1,0,0)) +Z; //.X   Z
+        case 2 : return 3*indexFromCoord(id+int3(0,0,1)) +X; //.Z   X
+        case 3 : return 3*indexFromCoord(id+int3(0,0,0)) +Z; //     Z
+        case 4 : return 3*indexFromCoord(id+int3(0,1,0)) +X; //.Y   X
+        case 5 : return 3*indexFromCoord(id+int3(1,1,0)) +Z; //.X.Y Z
+        case 6 : return 3*indexFromCoord(id+int3(0,1,1)) +X; //.Y.Z X
+        case 7 : return 3*indexFromCoord(id+int3(0,1,0)) +Z; //.Y   Z
+        case 8 : return 3*indexFromCoord(id+int3(0,0,0)) +Y; //     Y
+        case 9 : return 3*indexFromCoord(id+int3(1,0,0)) +Y; //.X   Y
+        case 10: return 3*indexFromCoord(id+int3(1,0,1)) +Y; //.X.Z Y
+        case 11: return 3*indexFromCoord(id+int3(0,0,1)) +Y; //.Z   Y
         default: return -1;
     }
 }
 
-
-Edge createEdge(float4 cubeCorners[8], int3 id, int index)
-{
-    Edge e;
-    e.id = calculateEdgeIndex(id, index);
-    int2 ep = cornerIndexFromEdge[index];
-    e.p = interpolateVerts(cubeCorners[ep.x], cubeCorners[ep.y]);
-    // e.pn = 0;
-    return e;
-}
-
 void generateEdge(float4 cubeCorners[8], int3 id, int edgeRef, int index)
 {
-    if ((edgeRef & edgeFlags[index]) != 0)
-        edges.Append(createEdge(cubeCorners, id, index));
+    if (edgeRef & edgeFlags[index])
+    {
+        int2 ep = cornerIndexFromEdge[index];
+        verts[calculateEdgeIndex(id, index)] = interpolateVerts(cubeCorners[ep.x], cubeCorners[ep.y]);
+    }
+}
+
+float4 cornerFromId(int3 id)
+{
+    return float4((centre + id * spacing - boundsSize*0.5).xyz, points[indexFromCoord(id)]);
 }
 
 [numthreads(numThreads,numThreads,numThreads)]
@@ -111,20 +113,21 @@ void March (int3 id : SV_DispatchThreadID)
 
     // 8 corners of the current cube
     float4 cubeCorners[8] = {
-        points[indexFromCoord(id.x, id.y, id.z)],
-        points[indexFromCoord(id.x + 1, id.y, id.z)],
-        points[indexFromCoord(id.x + 1, id.y, id.z + 1)],
-        points[indexFromCoord(id.x, id.y, id.z + 1)],
-        points[indexFromCoord(id.x, id.y + 1, id.z)],
-        points[indexFromCoord(id.x + 1, id.y + 1, id.z)],
-        points[indexFromCoord(id.x + 1, id.y + 1, id.z + 1)],
-        points[indexFromCoord(id.x, id.y + 1, id.z + 1)]
+        cornerFromId(id + int3(0,0,0)),
+        cornerFromId(id + int3(1,0,0)),
+        cornerFromId(id + int3(1,0,1)),
+        cornerFromId(id + int3(0,0,1)),
+        cornerFromId(id + int3(0,1,0)),
+        cornerFromId(id + int3(1,1,0)),
+        cornerFromId(id + int3(1,1,1)),
+        cornerFromId(id + int3(0,1,1)),
     };
 
     // Calculate unique index for each cube configuration.
     // There are 256 possible values
     // A value of 0 means cube is entirely inside surface; 255 entirely outside.
     // The value is used to look up the edge table, which indicates which edges of the cube are cut by the isosurface.
+    //*Use a branchless union of all the point comparisons
     int cubeIndex =
         ((int)saturate(sign(isoLevel - cubeCorners[0].w)) << 0)
         | ((int)saturate(sign(isoLevel - cubeCorners[1].w)) << 1)
@@ -136,26 +139,26 @@ void March (int3 id : SV_DispatchThreadID)
         | ((int)saturate(sign(isoLevel - cubeCorners[7].w)) << 7);
 
 
-    //Calculate 3 edges
     int edgeRef = edgeTable[cubeIndex];
     bool ex = id.x == extent-1;
     bool ey = id.y == extent-1;
     bool ez = id.z == extent-1;
+    
+    //Calculate 3 edge midpoints
     generateEdge(cubeCorners, id, edgeRef, 0);
-    if (ex) generateEdge(cubeCorners, id, edgeRef, 1);
-    if (ez) generateEdge(cubeCorners, id, edgeRef, 2);
     generateEdge(cubeCorners, id, edgeRef, 3);
-    if (ey) generateEdge(cubeCorners, id, edgeRef, 4);
-    if (ex && ey) generateEdge(cubeCorners, id, edgeRef, 5);
-    if (ey && ez) generateEdge(cubeCorners, id, edgeRef, 6);
-    if (ey) generateEdge(cubeCorners, id, edgeRef, 7);
     generateEdge(cubeCorners, id, edgeRef, 8);
+    //If at an extent, calculate for the last plane of points
+    if (ex) generateEdge(cubeCorners, id, edgeRef, 1);
     if (ex) generateEdge(cubeCorners, id, edgeRef, 9);
+    if (ex && ey) generateEdge(cubeCorners, id, edgeRef, 5);
     if (ex && ez) generateEdge(cubeCorners, id, edgeRef, 10);
+    if (ey) generateEdge(cubeCorners, id, edgeRef, 4);
+    if (ey) generateEdge(cubeCorners, id, edgeRef, 7);
+    if (ey && ez) generateEdge(cubeCorners, id, edgeRef, 6);
+    if (ez) generateEdge(cubeCorners, id, edgeRef, 2);
     if (ez) generateEdge(cubeCorners, id, edgeRef, 11);
-    
-    
-    
+        
     // Create triangles for current cube configuration
     for (int i = 0; triangulation[cubeIndex][i] != -1; i +=3) {
         // Get indices of corner points A and B for each of the three edges
@@ -179,11 +182,3 @@ void March (int3 id : SV_DispatchThreadID)
 
 }
 
-
-//
-// #pragma kernel Map
-// [numthreads(numThreads,numThreads,numThreads)]
-// void Map (int3 id : SV_DispatchThreadID)
-// {
-//     
-// }

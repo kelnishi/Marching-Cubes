@@ -1,5 +1,5 @@
 ﻿#pragma kernel Density
-#include "/Includes/Density.compute"
+#include "./Includes/Density.compute"
 
 float radius;
 
@@ -14,5 +14,5 @@ void Density (uint3 id : SV_DispatchThreadID)
     float density = radius - length(pos + offset);
 
     int index = indexFromCoord(id.x,id.y,id.z);
-    points[index] = float4(pos, density);
+    points[index] = density;
 }

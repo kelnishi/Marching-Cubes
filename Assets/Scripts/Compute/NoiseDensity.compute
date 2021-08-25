@@ -1,6 +1,6 @@
 ﻿#pragma kernel Density
-#include "/Includes/Density.compute"
-#include "/Includes/Noise.compute"
+#include "./Includes/Density.compute"
+#include "./Includes/Noise.compute"
 
 // Noise settings
 StructuredBuffer<float3> offsets;
@@ -57,6 +57,6 @@ void Density (int3 id : SV_DispatchThreadID)
     }
 
     int index = indexFromCoord(id.x,id.y,id.z);
-    points[index] = float4(pos, finalVal);
+    points[index] = finalVal;
     
 }
